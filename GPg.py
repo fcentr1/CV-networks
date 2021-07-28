@@ -2,19 +2,18 @@
 """
 Created on Mon Sep 23 16:55:18 2019
 
-@author: federico
+@author: fede
 """
 
+#The N modes gaussian states are represented as Z, a NxN complex valued adjacency matrix as described in https://arxiv.org/abs/1007.0725
+#or as CM, a 2Nx2N covariance matrix.
 #The notation for the quadratures is to stack the position vectors of operators q on top of the momentum vectors of operators p inside a vector x. 
 #Hence the first N entries of the covariance matrix will refer to position and the others to momentum.
+
+
 import matplotlib.pyplot as plt 
 from matplotlib import cm
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401 unused import
-
 import random
-
-from scipy.special import comb
-
 import networkx as nx
 
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
@@ -22,7 +21,7 @@ import numpy as np
 #import scipy as sp
 #import matInv
 
-#generates the covariance matrix (divided by h/2pi)
+#generates the covariance matrix (divided by h/2pi) starting from the complex adjacency matrix
 def _generateCovM(Zz):
     U=np.imag(Zz)
     V=np.real(Zz)
@@ -31,7 +30,7 @@ def _generateCovM(Zz):
     
     return CM 
 
-
+#generates the the complex adjacency matrix starting from the covariance matrix 
 def _generateZ(CM):
     dim=int(len(CM)/2)
     Ui=np.empty([dim,dim])
@@ -90,52 +89,13 @@ def negativity(Zz):
     return np.max([0,-np.log(2*lamb)])
 #    return np.min(eig)
 
-def Nmodes(Zz):
-    CM=_generateCovM(Zz)
-    return np.sum(np.abs(np.linalg.eig(CM)[0]-1/2)>1e-10)/2
 
-def niggativity(Zz):
-    if len(Zz)==2:
-        CM=_generateCovM(Zz)
-    elif len(Zz)==4:
-        CM=Zz
-    I1=CM[0,0]*CM[2,2]-CM[0,2]**2
-    I2=CM[1,1]*CM[3,3]-CM[1,3]**2
-    I3=CM[0,1]*CM[2,3]-CM[1,2]*CM[0,3]
-    I4=np.linalg.det(CM)
-    DELTA=I1+I2-2*I3
-    lamb=np.sqrt(0.5*(DELTA-np.sqrt(DELTA**2-4*I4)))
-    return np.max([0,-np.log(2*lamb)])
-#    return lamb
-
-def Fcoh(Zz):
-    if len(Zz)==2:
-        CM=_generateCovM(Zz)
-        sym=_buildSymM(len(Zz))
-    elif len(Zz)==4:
-        CM=Zz
-        sym=_buildSymM(int(len(Zz)/2))
-    gamma=np.diag([1,1,-1,1])
-    CMpt=gamma@CM@gamma
-    eig=np.min(np.abs(np.linalg.eig(2j*sym@(CMpt))[0]))     
-    return 1/(1+eig)
-
-
-
-
-def Fcoh3(Zz):
-    if len(Zz)==2:
-        CM=_generateCovM(Zz)
-    elif len(Zz)==4:
-        CM=Zz    
-    dx2=(CM[0,0]+CM[1,1]-2*CM[0,1])
-    dp2=(CM[2,2]+CM[3,3]+2*CM[2,3])
-    return 1/np.sqrt((1+dx2)*(1+dp2))
-
+#Energy of the state
 def DeltaE(Zz):
     CM=_generateCovM(Zz)
     return 0.5*(np.trace(CM)-len(Zz))
 
+#Compute Wigner function
 def _Wigner(sigma):
     Vrange=2
     steps=100
@@ -150,6 +110,7 @@ def _Wigner(sigma):
             WW[i,j]=(2*np.pi)**(-int(len(sigma)/2))*det**(-0.5)*np.exp(-0.5*esp)
     return WW
 
+#Compute the reduced state of 'node'
 def _partial(Zz,node):
     CM=_generateCovM(Zz)
     size=int(len(CM)/2)
@@ -160,6 +121,7 @@ def _partial(Zz,node):
     redCM[1,1]=CM[node+size,node+size]
     return redCM
 
+#Reduced state of node1 and node2
 def _2partial(Zz,node1,node2):
     CM=_generateCovM(Zz)
     size=int(len(CM)/2)
@@ -182,7 +144,7 @@ def _2partial(Zz,node1,node2):
     redCM[3,2]=redCM[2,3]
     return redCM
 
-  
+#Squeezing cost of the state  
 def squeezeCost(Zz):
     dim=len(Zz)
     SUM=0
@@ -192,6 +154,7 @@ def squeezeCost(Zz):
         SUM+=10*np.log(eig[x])/np.log(10)
     return np.real(SUM)
 
+#Number of modes in the gaussian state
 def NModes(Zz):
     SUM=0
     eig=np.linalg.eig(2*_generateCovM(Zz))[0]
@@ -203,6 +166,7 @@ def NModes(Zz):
         x+=1
     return x
 
+#Squeezing spectrum of the state
 def histoSqueeze(Zz):
     eig=np.linalg.eig(2*_generateCovM(Zz))[0]
     eig=np.sort(eig)
@@ -210,26 +174,20 @@ def histoSqueeze(Zz):
     return np.abs(10*np.log(eig)/np.log(10))
 #    return eig
 
+#Adjacency matrix of the 
 def adjMat(Zz):
     return np.abs(Zz-np.diag(np.diag(Zz)))
     
-
+#Spectrum of adj matrix
 def histoAdj(Aa):
     eig=np.linalg.eig(Aa)[0]
     ki=np.sqrt(1+eig**2)
     ki=-np.sort(-ki)
     return ki
 
-def graphEnt(Z):
-    VV=np.real(Z[0,1])
-    Ra=np.imag(Z[0,0])
-    Rb=np.imag(Z[1,1])
-    dsig=0.5+VV**2/(Ra*Rb)
-    EE=-np.log(np.sqrt(0.5*(dsig-np.sqrt(dsig**2-1/4))))/np.log(2)
-    return np.max([0,EE])
 
     
-
+#Plot wigner function
 def PlotWigner(CM):
     
     fig = plt.figure()
@@ -254,15 +212,17 @@ def PlotWigner(CM):
     plt.show()
     return 
 
+#Count the number of edges in the state Z
 def connections(Zz):
     return np.count_nonzero(Zz-np.diag(np.diag(Zz)))/2
 
 #################Gaussian transformations on Z#################
-    
+
+#Multimode squeezing
 def MultiSqueeze(Zz, ss): #s must be an array not a list
     SS=np.identity(len(Zz))*np.power(10.,-ss/10)
     return SS.dot(Zz)
-
+#Two modes beamsplitter between modes node1 and node2 with angle phi
 def BeamSplitter(Zz, node1,node2,phi):
     newZz=np.copy(Zz)
     newZz[node1,:]=Zz[node1,:]*np.cos(phi)-Zz[node2,:]*np.sin(phi)
@@ -275,16 +235,19 @@ def BeamSplitter(Zz, node1,node2,phi):
     newZz[node2,node2]=Zz[node1,node1]*np.sin(phi)**2+Zz[node2,node2]*np.cos(phi)**2+Zz[node1,node2]*np.sin(2*phi)
     return newZz
 
+#CZ gate between node1 and node2 with intensity g
 def CZgate(Zz, g, node1,node2):
     Zz[node1,node2]=Zz[node1,node2]+g
     Zz[node2,node1]=Zz[node1,node2]
     return Zz
 
+#Position quadrature measurement
 def MeasureQ(Zz, node):
     Zz=np.delete(Zz, (node), axis=0)
     Zz=np.delete(Zz, (node), axis=1)
     return Zz
 
+#Quadrature phase rotation of angle phi
 def PhaseShift(ZZ, node, phi):
     ZZ=np.matrix(ZZ)
     newZZ=ZZ-np.sin(phi)*np.matmul(ZZ[:,node],ZZ[node,:])/(ZZ[node,node]*np.sin(phi)+np.cos(phi))
@@ -294,6 +257,7 @@ def PhaseShift(ZZ, node, phi):
     
     return np.array(newZZ)
     
+#Momentum quadrature measurement
 def MeasureP(Zz, node):
     return MeasureQ(PhaseShift(Zz, node, np.pi/2), node)
 
@@ -304,28 +268,31 @@ def MeasureP(Zz, node):
 def VacuumState(Nn):
     return 1j*np.identity(Nn, dtype=np.cdouble)
 
-#Generates a linear cluster state
-
+#Generates a linear graph state
 def LinGraph(Nn, gg, ss):
     Zlin=MultiSqueeze(VacuumState(Nn),ss)
     for i in range(Nn-1):
         Zlin=CZgate(Zlin,gg,i,i+1)
     return Zlin
         
+#Generates a circular graph state
 def circGraph(Nn,gg, ss):
     zz=LinGraph(Nn,gg,ss)
     return CZgate(zz,gg,0, Nn-1)
 
+#Generates an EPR pair
 def EPR(sss):
     sqZ=MultiSqueeze(VacuumState(2),np.array([sss,-sss]))
     return BeamSplitter(sqZ,0,1,np.pi/4)
 
+#Generates a star graph state
 def starGraph(Nn,gg,ss):
     Zstar=MultiSqueeze(VacuumState(Nn),ss)
     for i in range(Nn-1):
         Zstar=CZgate(Zstar,gg,0,i+1)
     return Zstar
 
+#Generates a diamond graph state
 def Diamond(Nn,gg,ss):
     state=MultiSqueeze(VacuumState(Nn),ss)
     for i in range(1,Nn-1):
@@ -346,6 +313,7 @@ def Diamond(Nn,gg,ss):
 #                state=CZgate(state,gg,i+j*W,i+(j+1)*W)
 #    return state
 
+#generates a rectangular cluster state
 def clusterState(rows,cols,gg,ss):
     state=MultiSqueeze(VacuumState(rows*cols),ss)    
     for r in range(rows):
@@ -453,6 +421,7 @@ def fullGraph(Nn,gg,ss):
             state=CZgate(state,gg,i,i+j+1)
     return state   
 
+#Complex network graph states
 
 def barabasi_albert(Nn,Mm,seed,gg,ss):
     graph=nx.adjacency_matrix(nx.barabasi_albert_graph(Nn,Mm,seed))
@@ -478,6 +447,7 @@ def erdos_renyi(Nn,beta,seed,gg,ss):
             state=CZgate(state,gg*graph[i,j+i],i,j+i)
     return state
 
+#General graph state given a nx graph
 def graphState(NXgraph,gg,ss):
     Nn=len(NXgraph)
     Aa=nx.adjacency_matrix(NXgraph)
